@@ -3,6 +3,7 @@ name = "textus-derive"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "../README.md"
 
 description = "A statically checked templating engine. [this derive macro should be used through the `textus` crate]"
 repository = "https://github.com/Jezza/textus"

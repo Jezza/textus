@@ -6,14 +6,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Jezza <jeremy.a.barrow@gmail.com>"]
 license = "MIT"
 
 [workspace.dependencies]
-textus        = { version = "0.1.0", path = "./textus" }
-textus-derive = { version = "0.1.0", path = "./textus-derive" }
+textus        = { version = "0.1.1", path = "./textus" }
+textus-derive = { version = "0.1.1", path = "./textus-derive" }
 
 syn         = { version = "2" }
 quote       = { version = "1"  }

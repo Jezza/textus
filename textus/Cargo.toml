@@ -3,6 +3,7 @@ name = "textus"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "../README.md"
 
 description = "A derive macro that renders an entire folder of templates into typed, compile-time-validated output."
 repository = "https://github.com/Jezza/textus"

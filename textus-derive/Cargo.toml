@@ -1,0 +1,16 @@
+[package]
+name = "textus-derive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+description = "A statically checked templating engine. [this derive macro should be used through the `textus` crate]"
+repository = "https://github.com/Jezza/textus"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn         = { workspace = true }
+quote       = { workspace = true }
+proc-macro2 = { workspace = true }

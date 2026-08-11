@@ -1,7 +1,11 @@
-extern crate alloc;
+#[cfg(not(feature = "std"))]
+extern crate alloc as sys;
 
-use alloc::borrow::Cow;
-use alloc::vec::Vec;
+#[cfg(feature = "std")]
+extern crate std as sys;
+
+use sys::borrow::Cow;
+use sys::vec::Vec;
 
 pub use textus_derive::Template;
 

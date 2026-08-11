@@ -21,6 +21,8 @@ struct Attrs {
     literal: bool,
     strip_prefix: Option<String>,
     strip_suffix: Option<String>,
+    /// Where to find the `textus` crate in the caller's namespace.
+    root: syn::Path,
 }
 
 enum Seg {
@@ -50,6 +52,7 @@ fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
         .ok_or_else(|| syn::Error::new_spanned(input, "missing #[template(...)]"))?;
 
     let (mut path, mut literal, mut strip_prefix, mut strip_suffix) = (None, false, None, None);
+    let mut root = None;
     attr.parse_nested_meta(|meta| {
         if meta.path.is_ident("path") {
             path = Some(meta.value()?.parse::<LitStr>()?.value());
@@ -59,9 +62,17 @@ fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
             strip_prefix = Some(meta.value()?.parse::<LitStr>()?.value());
         } else if meta.path.is_ident("strip_suffix") {
             strip_suffix = Some(meta.value()?.parse::<LitStr>()?.value());
+        } else if meta.path.is_ident("root") {
+            // Accept both `root = ::path::to::textus` and `root = "::path::to::textus"`
+            let value = meta.value()?;
+            root = Some(if value.peek(LitStr) {
+                value.parse::<LitStr>()?.parse::<syn::Path>()?
+            } else {
+                value.parse::<syn::Path>()?
+            });
         } else {
             return Err(meta.error(
-                "unknown option; expected `path`, `literal`, `strip_prefix` or `strip_suffix`",
+                "unknown option; expected `path`, `literal`, `strip_prefix`, `strip_suffix` or `root`",
             ));
         }
         Ok(())
@@ -72,6 +83,7 @@ fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
         literal,
         strip_prefix,
         strip_suffix,
+        root: root.unwrap_or_else(|| syn::parse_quote!(::textus)),
     })
 }
 
@@ -234,6 +246,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     }
 
     // Build the render items
+    let root = &attrs.root;
     let render_items = entries.iter().map(|e| {
         let rel = &e.rel;
         let abs = &e.abs;
@@ -251,9 +264,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     }
                 }
             }
-            quote! { ::std::borrow::Cow::Owned(format!(#fmt, #(#args),*)) }
+            quote! {
+                #root::__private::Cow::Owned(
+                    #root::__private::format!(#fmt, #(#args),*)
+                )
+            }
         } else {
-            quote! { ::std::borrow::Cow::Borrowed(include_str!(#abs)) }
+            quote! { #root::__private::Cow::Borrowed(include_str!(#abs)) }
         };
 
         quote! { (#rel, #content_expr) }
@@ -267,13 +284,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     });
 
     Ok(quote! {
-        impl #impl_g ::textus::Template for #name #ty_g #where_cl {
-            fn render(&self) -> ::std::vec::Vec<(
+        impl #impl_g #root::Template for #name #ty_g #where_cl {
+            fn render(&self) -> #root::__private::Vec<(
                 &'static str,
-                ::std::borrow::Cow<'static, str>,
+                #root::__private::Cow<'static, str>,
             )> {
                 #(#tracking)*
-                vec![#(#render_items),*]
+                #root::__private::Vec::from([#(#render_items),*])
             }
         }
     })

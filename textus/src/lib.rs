@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 #[cfg(not(feature = "std"))]
 extern crate alloc as sys;
 
@@ -32,4 +34,12 @@ pub trait Template {
 
         Ok(())
     }
+}
+
+/// Implementation details used by the generated code.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::sys::borrow::Cow;
+    pub use crate::sys::format;
+    pub use crate::sys::vec::Vec;
 }

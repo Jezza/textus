@@ -33,14 +33,14 @@ dependencies = [
 
 [[package]]
 name = "textus"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "textus-derive",
 ]
 
 [[package]]
 name = "textus-derive"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "proc-macro2",
  "quote",

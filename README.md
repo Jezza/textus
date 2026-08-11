@@ -50,6 +50,7 @@ Either mismatch is a compile error.
 | `literal`              | Files are copied verbatim.                                |
 | `strip_prefix = "..."` | Trim a prefix from each output path.                      |
 | `strip_suffix = "..."` | Trim a suffix from each output path.                      |
+| `root = ...`           | Path to the `textus` crate. Defaults to `::textus`.       |
 
 ### `literal`
 
@@ -66,6 +67,20 @@ assets/main.css.tmpl  →  main.css
 ```
 
 Path rewriting still works as usual, since `strip_prefix` / `strip_suffix` act on output paths rather than contents.
+
+## `no_std`
+
+`textus` is `no_std`-compatible; disable default features and it needs only `alloc`:
+
+```toml
+textus = { version = "0.3", default-features = false }
+```
+
+`Template::render` is always available. `render_into`, which writes the rendered files to disk, requires the `std` feature (on by default).
+
+### `root`
+
+Can be used by framework authors if they re-export this library.
 
 ## How it works
 

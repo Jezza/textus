@@ -44,39 +44,64 @@ Either mismatch is a compile error.
 
 ## Options
 
+Both `#[template(...)]` and `#[embed(...)]` accept the same options:
+
 | Option                 | Effect                                                    |
 |------------------------|-----------------------------------------------------------|
 | `path = "..."`         | Template directory, relative to the crate root. Required. |
-| `literal`              | Files are copied verbatim.                                |
 | `strip_prefix = "..."` | Trim a prefix from each output path.                      |
 | `strip_suffix = "..."` | Trim a suffix from each output path.                      |
 | `root = ...`           | Path to the `textus` crate. Defaults to `::textus`.       |
 
-### `literal`
+## `Embed`
 
-With `literal`, files aren't processed, so `{{ ... }}` is left exactly as written.
+For files that should be copied verbatim, derive `Embed` instead. Contents are never parsed, so `{{ ... }}` is left exactly as written, and files needn't be valid UTF-8 — binary assets such as images and fonts work unchanged.
 
 ```rust
-#[derive(Template)]
-#[template(path = "assets/", literal, strip_suffix = ".tmpl")]
+use textus::Embed;
+
+#[derive(Embed)]
+#[embed(path = "assets/", strip_suffix = ".tmpl")]
 struct Assets;
+
+for (path, bytes) in Assets::iter() {
+    // path: &'static str, bytes: &'static [u8]
+}
 ```
 
 ```
 assets/main.css.tmpl  →  main.css
 ```
 
-Path rewriting still works as usual, since `strip_prefix` / `strip_suffix` act on output paths rather than contents.
+`Embed` reads no fields, so any struct shape works and none of the `Template` validation applies. Path rewriting behaves the same, since `strip_prefix` / `strip_suffix` act on output paths rather than contents.
+
+### Migrating from `literal`
+
+The `literal` flag was replaced by `Embed` in 0.4:
+
+```rust
+// before
+#[derive(Template)]
+#[template(path = "assets/", literal, strip_suffix = ".tmpl")]
+struct Assets;
+
+// after
+#[derive(Embed)]
+#[embed(path = "assets/", strip_suffix = ".tmpl")]
+struct Assets;
+```
+
+Note that contents are now `&'static [u8]` rather than `Cow<'static, str>`, so text call sites need `str::from_utf8`.
 
 ## `no_std`
 
 `textus` is `no_std`-compatible; disable default features and it needs only `alloc`:
 
 ```toml
-textus = { version = "0.3", default-features = false }
+textus = { version = "0.4", default-features = false }
 ```
 
-`Template::render` is always available. `render_into`, which writes the rendered files to disk, requires the `std` feature (on by default).
+`Template::render` and `Embed::iter` are always available. `Template::render_into` and `Embed::write_into`, which write files to disk, require the `std` feature (on by default).
 
 ### `root`
 
@@ -88,4 +113,5 @@ Can be used by framework authors if they re-export this library.
 - Variables (`{{ var }}`) are matched against the struct's named fields.
 - Mismatches produce clear `compile_error!` messages with context.
 - Templates without variables are embedded with `include_str!` and returned as `Cow::Borrowed` (zero allocation); dynamic ones use `format!` and return `Cow::Owned`.
-- File changes are tracked so `cargo` rebuilds automatically when templates change.
+- `Embed` skips all of that, emitting a `&'static` slice of `include_bytes!` pairs.
+- File changes are tracked so `cargo` rebuilds automatically when templates change. Adding or removing a file does not trigger a rebuild, since only file contents are tracked.

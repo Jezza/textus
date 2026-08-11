@@ -9,7 +9,7 @@ extern crate std as sys;
 use sys::borrow::Cow;
 use sys::vec::Vec;
 
-pub use textus_derive::Template;
+pub use textus_derive::{Embed, Template};
 
 /// A compiled template that can render its files by substituting struct fields
 /// into `{{ var }}` placeholders.
@@ -30,6 +30,34 @@ pub trait Template {
             }
 
             std::fs::write(abs, content.as_ref())?;
+        }
+
+        Ok(())
+    }
+}
+
+/// A directory of files embedded verbatim, keyed by relative path.
+///
+/// Unlike [`Template`], contents are never parsed, so `{{ ... }}` is left
+/// exactly as written and files need not be valid UTF-8 — binary assets such
+/// as images and fonts work unchanged.
+///
+/// Derived via `#[derive(Embed)]` — see the crate-level docs for usage.
+pub trait Embed {
+    /// Returns every embedded file as a `(relative_path, contents)` pair.
+    fn iter() -> &'static [(&'static str, &'static [u8])];
+
+    /// Writes every embedded file into `target`, creating directories as needed.
+    #[cfg(feature = "std")]
+    fn write_into(target: &std::path::Path) -> std::io::Result<()> {
+        for &(rel_path, contents) in Self::iter() {
+            let abs = target.join(rel_path);
+
+            if let Some(parent) = abs.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            std::fs::write(abs, contents)?;
         }
 
         Ok(())

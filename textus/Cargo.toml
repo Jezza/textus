@@ -8,5 +8,9 @@ readme = "../README.md"
 description = "A derive macro that renders an entire folder of templates into typed, compile-time-validated output."
 repository = "https://github.com/Jezza/textus"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 textus-derive = { workspace = true }

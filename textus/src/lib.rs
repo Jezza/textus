@@ -1,4 +1,7 @@
-use std::borrow::Cow;
+extern crate alloc;
+
+use alloc::borrow::Cow;
+use alloc::vec::Vec;
 
 pub use textus_derive::Template;
 
@@ -11,6 +14,7 @@ pub trait Template {
     fn render(&self) -> Vec<(&'static str, Cow<'static, str>)>;
 
     /// Writes every rendered template into `target`, creating directories as needed.
+    #[cfg(feature = "std")]
     fn render_into(&self, target: &std::path::Path) -> std::io::Result<()> {
         for (rel_path, content) in self.render() {
             let abs = target.join(rel_path);

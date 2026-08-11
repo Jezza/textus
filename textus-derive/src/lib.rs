@@ -18,7 +18,7 @@ pub fn derive_template(input: TokenStream) -> TokenStream {
 
 struct Attrs {
     path: String,
-    raw: bool,
+    literal: bool,
     strip_prefix: Option<String>,
     strip_suffix: Option<String>,
 }
@@ -34,6 +34,12 @@ struct FileEntry {
     abs: String,
 }
 
+impl FileEntry {
+    fn has_vars(&self) -> bool {
+        self.segs.iter().any(|s| matches!(s, Seg::Var(_)))
+    }
+}
+
 // ── Attribute parsing ────────────────────────────────────────────────
 
 fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
@@ -43,19 +49,19 @@ fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
         .find(|a| a.path().is_ident("template"))
         .ok_or_else(|| syn::Error::new_spanned(input, "missing #[template(...)]"))?;
 
-    let (mut path, mut raw, mut strip_prefix, mut strip_suffix) = (None, false, None, None);
+    let (mut path, mut literal, mut strip_prefix, mut strip_suffix) = (None, false, None, None);
     attr.parse_nested_meta(|meta| {
         if meta.path.is_ident("path") {
             path = Some(meta.value()?.parse::<LitStr>()?.value());
-        } else if meta.path.is_ident("raw") {
-            raw = true;
+        } else if meta.path.is_ident("literal") {
+            literal = true;
         } else if meta.path.is_ident("strip_prefix") {
             strip_prefix = Some(meta.value()?.parse::<LitStr>()?.value());
         } else if meta.path.is_ident("strip_suffix") {
             strip_suffix = Some(meta.value()?.parse::<LitStr>()?.value());
         } else {
             return Err(meta.error(
-                "unknown option; expected `path`, `raw`, `strip_prefix` or `strip_suffix`",
+                "unknown option; expected `path`, `literal`, `strip_prefix` or `strip_suffix`",
             ));
         }
         Ok(())
@@ -63,7 +69,7 @@ fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
 
     Ok(Attrs {
         path: path.ok_or_else(|| syn::Error::new_spanned(attr, "`path` is required"))?,
-        raw,
+        literal,
         strip_prefix,
         strip_suffix,
     })
@@ -137,8 +143,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 .iter()
                 .map(|f| f.ident.as_ref().unwrap().to_string())
                 .collect(),
-            // `raw` never substitutes fields, so any shape will do
-            _ if attrs.raw => HashSet::new(),
+            // `literal` never substitutes fields, so any shape will do
+            _ if attrs.literal => HashSet::new(),
             _ => return Err(syn::Error::new_spanned(&input, "named fields required")),
         },
         _ => return Err(syn::Error::new_spanned(&input, "only structs supported")),
@@ -180,8 +186,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             }
         }
 
-        let segs = if attrs.raw {
-            vec![Seg::Lit(content)]
+        // Nothing to interpolate under `literal` — `include_str!` embeds the file as-is
+        let segs = if attrs.literal {
+            Vec::new()
         } else {
             parse_template(&content)
         };
@@ -215,7 +222,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     }
 
     // Every struct field must appear in at least one template
-    if !attrs.raw {
+    if !attrs.literal {
         for f in &fields {
             if !all_vars.contains(f) {
                 return Err(syn::Error::new_spanned(
@@ -229,9 +236,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     // Build the render items
     let render_items = entries.iter().map(|e| {
         let rel = &e.rel;
-        let has_vars = e.segs.iter().any(|s| matches!(s, Seg::Var(_)));
+        let abs = &e.abs;
 
-        let content_expr = if has_vars {
+        let content_expr = if e.has_vars() {
             let mut fmt = String::new();
             let mut args = Vec::<proc_macro2::TokenStream>::new();
             for seg in &e.segs {
@@ -246,22 +253,15 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             }
             quote! { ::std::borrow::Cow::Owned(format!(#fmt, #(#args),*)) }
         } else {
-            let text: String = e
-                .segs
-                .iter()
-                .map(|s| match s {
-                    Seg::Lit(l) => l.as_str(),
-                    _ => unreachable!(),
-                })
-                .collect();
-            quote! { ::std::borrow::Cow::Borrowed(#text) }
+            quote! { ::std::borrow::Cow::Borrowed(include_str!(#abs)) }
         };
 
         quote! { (#rel, #content_expr) }
     });
 
-    // File-dependency tracking so cargo rebuilds when templates change
-    let tracking = entries.iter().map(|e| {
+    // File-dependency tracking so cargo rebuilds when templates change.
+    // Variable-free files are tracked by their own `include_str!`.
+    let tracking = entries.iter().filter(|e| e.has_vars()).map(|e| {
         let abs = &e.abs;
         quote! { let _ = include_bytes!(#abs); }
     });

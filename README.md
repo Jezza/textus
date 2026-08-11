@@ -2,8 +2,7 @@
 
 Compile-time validated folder-based templating for Rust, powered by a derive macro.
 
-Textus walks a directory of template files at compile time, extracts `{{ var }}` placeholders,
-and checks them against your struct fields — catching mismatches before your code ever runs.
+Textus walks a directory of template files at compile time, extracts `{{ var }}` placeholders, and checks them against your struct fields — catching mismatches before your code ever runs.
 
 ## Usage
 
@@ -45,21 +44,20 @@ Either mismatch is a compile error.
 
 ## Options
 
-| Option                | Effect                                                   |
-|-----------------------|----------------------------------------------------------|
-| `path = "..."`        | Template directory, relative to the crate root. Required. |
-| `raw`                 | No templating — files are copied through verbatim.       |
-| `strip_prefix = "..."`| Trim a prefix from each output path.                     |
-| `strip_suffix = "..."`| Trim a suffix from each output path.                      |
+| Option                 | Effect                                                    |
+|------------------------|-----------------------------------------------------------|
+| `path = "..."`         | Template directory, relative to the crate root. Required. |
+| `literal`              | Files are copied verbatim.                                |
+| `strip_prefix = "..."` | Trim a prefix from each output path.                      |
+| `strip_suffix = "..."` | Trim a suffix from each output path.                      |
 
-### `raw`
+### `literal`
 
-With `raw`, files hold no templates: `{{ ... }}` is left exactly as written, and
-field validation doesn't apply — so the struct can have no fields at all.
+With `literal`, files aren't processed, so `{{ ... }}` is left exactly as written.
 
 ```rust
 #[derive(Template)]
-#[template(path = "assets/", raw, strip_suffix = ".tmpl")]
+#[template(path = "assets/", literal, strip_suffix = ".tmpl")]
 struct Assets;
 ```
 
@@ -67,13 +65,12 @@ struct Assets;
 assets/main.css.tmpl  →  main.css
 ```
 
-Path rewriting still works as usual, since `strip_prefix` / `strip_suffix` act on
-output paths rather than contents.
+Path rewriting still works as usual, since `strip_prefix` / `strip_suffix` act on output paths rather than contents.
 
 ## How it works
 
 - The derive macro runs at compile time, reading and parsing every file under `path`.
 - Variables (`{{ var }}`) are matched against the struct's named fields.
 - Mismatches produce clear `compile_error!` messages with context.
-- Templates without variables return `Cow::Borrowed` (zero allocation); dynamic ones use `format!` and return `Cow::Owned`.
-- File changes are tracked via `include_bytes!`, so `cargo` rebuilds automatically when templates change.
+- Templates without variables are embedded with `include_str!` and returned as `Cow::Borrowed` (zero allocation); dynamic ones use `format!` and return `Cow::Owned`.
+- File changes are tracked so `cargo` rebuilds automatically when templates change.

@@ -16,15 +16,9 @@ pub fn derive_template(input: TokenStream) -> TokenStream {
 
 // ── Attribute types ──────────────────────────────────────────────────
 
-enum Mode {
-    Strict,
-    Default,
-    Lenient,
-}
-
 struct Attrs {
     path: String,
-    mode: Mode,
+    raw: bool,
     strip_prefix: Option<String>,
     strip_suffix: Option<String>,
 }
@@ -49,29 +43,27 @@ fn parse_attrs(input: &DeriveInput) -> syn::Result<Attrs> {
         .find(|a| a.path().is_ident("template"))
         .ok_or_else(|| syn::Error::new_spanned(input, "missing #[template(...)]"))?;
 
-    let (mut path, mut mode, mut strip_prefix, mut strip_suffix) = (None, Mode::Default, None, None);
+    let (mut path, mut raw, mut strip_prefix, mut strip_suffix) = (None, false, None, None);
     attr.parse_nested_meta(|meta| {
         if meta.path.is_ident("path") {
             path = Some(meta.value()?.parse::<LitStr>()?.value());
+        } else if meta.path.is_ident("raw") {
+            raw = true;
         } else if meta.path.is_ident("strip_prefix") {
             strip_prefix = Some(meta.value()?.parse::<LitStr>()?.value());
         } else if meta.path.is_ident("strip_suffix") {
             strip_suffix = Some(meta.value()?.parse::<LitStr>()?.value());
-        } else if meta.path.is_ident("mode") {
-            let lit = meta.value()?.parse::<LitStr>()?.value();
-            mode = match lit.as_str() {
-                "strict" => Mode::Strict,
-                "default" => Mode::Default,
-                "lenient" => Mode::Lenient,
-                _ => return Err(meta.error(format!("unknown mode `{lit}`"))),
-            };
+        } else {
+            return Err(meta.error(
+                "unknown option; expected `path`, `raw`, `strip_prefix` or `strip_suffix`",
+            ));
         }
         Ok(())
     })?;
 
     Ok(Attrs {
         path: path.ok_or_else(|| syn::Error::new_spanned(attr, "`path` is required"))?,
-        mode,
+        raw,
         strip_prefix,
         strip_suffix,
     })
@@ -145,6 +137,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 .iter()
                 .map(|f| f.ident.as_ref().unwrap().to_string())
                 .collect(),
+            // `raw` never substitutes fields, so any shape will do
+            _ if attrs.raw => HashSet::new(),
             _ => return Err(syn::Error::new_spanned(&input, "named fields required")),
         },
         _ => return Err(syn::Error::new_spanned(&input, "only structs supported")),
@@ -186,7 +180,11 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             }
         }
 
-        let segs = parse_template(&content);
+        let segs = if attrs.raw {
+            vec![Seg::Lit(content)]
+        } else {
+            parse_template(&content)
+        };
         let vars = collect_vars(&segs);
 
         // Every variable must be a valid Rust identifier
@@ -199,15 +197,12 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             })?;
         }
 
-        // Default + Strict: template variables must exist as struct fields
-        if !matches!(attrs.mode, Mode::Lenient) {
-            for v in &vars {
-                if !fields.contains(v) {
-                    return Err(syn::Error::new_spanned(
-                        &input,
-                        format!("variable `{v}` in `{rel}` has no matching struct field"),
-                    ));
-                }
+        for v in &vars {
+            if !fields.contains(v) {
+                return Err(syn::Error::new_spanned(
+                    &input,
+                    format!("variable `{v}` in `{rel}` has no matching struct field"),
+                ));
             }
         }
 
@@ -219,13 +214,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         });
     }
 
-    // Strict: every struct field must appear in at least one template
-    if matches!(attrs.mode, Mode::Strict) {
+    // Every struct field must appear in at least one template
+    if !attrs.raw {
         for f in &fields {
             if !all_vars.contains(f) {
                 return Err(syn::Error::new_spanned(
                     &input,
-                    format!("field `{f}` unused in any template (strict mode)"),
+                    format!("field `{f}` unused in any template"),
                 ));
             }
         }

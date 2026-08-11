@@ -34,15 +34,41 @@ fn main() {
 }
 ```
 
-## Validation modes
+## Validation
 
-Set the mode with `#[template(path = "...", mode = "strict")]`.
+Validation is strict, and there is nothing to opt into:
 
-| Mode        | Template vars must exist as fields | Fields must appear in templates |
-|-------------|------------------------------------|---------------------------------|
-| `"default"` | ✓                                  | ✗                               |
-| `"strict"`  | ✓                                  | ✓                               |
-| `"lenient"` | ✗                                  | ✗                               |
+- Every `{{ var }}` must have a matching struct field.
+- Every struct field must appear in at least one template.
+
+Either mismatch is a compile error.
+
+## Options
+
+| Option                | Effect                                                   |
+|-----------------------|----------------------------------------------------------|
+| `path = "..."`        | Template directory, relative to the crate root. Required. |
+| `raw`                 | No templating — files are copied through verbatim.       |
+| `strip_prefix = "..."`| Trim a prefix from each output path.                     |
+| `strip_suffix = "..."`| Trim a suffix from each output path.                      |
+
+### `raw`
+
+With `raw`, files hold no templates: `{{ ... }}` is left exactly as written, and
+field validation doesn't apply — so the struct can have no fields at all.
+
+```rust
+#[derive(Template)]
+#[template(path = "assets/", raw, strip_suffix = ".tmpl")]
+struct Assets;
+```
+
+```
+assets/main.css.tmpl  →  main.css
+```
+
+Path rewriting still works as usual, since `strip_prefix` / `strip_suffix` act on
+output paths rather than contents.
 
 ## How it works
 
